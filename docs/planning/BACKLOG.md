@@ -22,11 +22,15 @@
 
 ### Phase 2 — Core Proxy
 
-- [ ] Implement prefix-based router (`internal/routing/router.go`)
-- [ ] Map route → upstream by path prefix
-- [ ] Implement reverse proxy (`internal/proxy/proxy.go`)
-- [ ] Configure HTTP transport
-- [ ] Propagate headers through proxy
+- [x] Write router unit tests (`internal/routing/router_test.go`)
+- [x] Implement `routing.New` — sort routes longest-prefix-first (`internal/routing/router.go`)
+- [x] Implement `routing.Router.Match` — linear scan, return first hit
+- [x] Write proxy unit tests (`internal/proxy/proxy_test.go`)
+- [x] Implement `proxy.New` and `proxy.Proxy.ServeHTTP` (`internal/proxy/proxy.go`)
+- [x] Set custom `ErrorHandler` on `ReverseProxy` (502 on upstream error)
+- [x] Update `server.New` to accept `*routing.Router`, register proxy as catch-all
+- [x] Update `main.go` to build router from config and pass to server
+- [x] Verify `go build ./...` and `go test ./...` pass
 
 ---
 

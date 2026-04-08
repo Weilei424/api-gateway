@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"gateway/internal/config"
+	"gateway/internal/routing"
 	"gateway/internal/server"
 )
 
@@ -18,7 +19,8 @@ func main() {
 		log.Printf("  %s -> %s", r.Path, r.Upstream)
 	}
 
-	srv := server.New(cfg.Server.Port)
+	router := routing.New(cfg.Routes)
+	srv := server.New(cfg.Server.Port, router)
 	if err := srv.Start(); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}

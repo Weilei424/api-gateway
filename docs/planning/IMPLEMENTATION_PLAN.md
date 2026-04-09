@@ -26,7 +26,7 @@ Mini API Gateway implemented in Go — inspired by Kong, Envoy, and NGINX Gatewa
 
 ---
 
-### Phase 2 — Core Proxy (Steps 3–4)
+### Phase 2 — Core Proxy (Steps 3–4) ✅ COMPLETE
 
 **Goal:** Route incoming requests to upstream services via reverse proxy.
 

@@ -13,6 +13,9 @@ import (
 func TestProxy_ForwardsRequest(t *testing.T) {
 	// Start a fake upstream that echoes a known response.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/123" {
+			t.Errorf("expected upstream to receive path /users/123, got %s", r.URL.Path)
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("upstream response"))
 	}))

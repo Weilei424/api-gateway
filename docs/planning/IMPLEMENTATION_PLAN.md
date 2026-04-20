@@ -41,7 +41,7 @@ Mini API Gateway implemented in Go — inspired by Kong, Envoy, and NGINX Gatewa
 
 ---
 
-### Phase 3 — Middleware & Observability (Steps 5–7)
+### Phase 3 — Middleware & Observability (Steps 5–7) ✅ COMPLETE
 
 **Goal:** Per-request middleware pipeline, structured logging, Prometheus metrics.
 
@@ -55,6 +55,7 @@ Mini API Gateway implemented in Go — inspired by Kong, Envoy, and NGINX Gatewa
 **Success criteria:**
 - Every request produces a structured zap log line
 - `/metrics` exposes `gateway_requests_total` and `gateway_request_duration_seconds`
+- Matched upstream is available in request completion logs for proxied traffic
 
 ---
 

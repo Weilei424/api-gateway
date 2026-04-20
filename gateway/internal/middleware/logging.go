@@ -14,6 +14,7 @@ func Logging(logger *zap.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := newStatusRecorder(w)
+			r = r.WithContext(proxy.WithUpstream(r.Context(), proxy.UpstreamFromContext(r.Context())))
 
 			next.ServeHTTP(rec, r)
 

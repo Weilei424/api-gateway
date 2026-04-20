@@ -8,6 +8,8 @@ import (
 	"gateway/internal/config"
 	"gateway/internal/proxy"
 	"gateway/internal/routing"
+
+	"go.uber.org/zap"
 )
 
 func TestProxy_ForwardsRequest(t *testing.T) {
@@ -15,6 +17,9 @@ func TestProxy_ForwardsRequest(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/users/123" {
 			t.Errorf("expected upstream to receive path /users/123, got %s", r.URL.Path)
+		}
+		if r.URL.RawQuery != "active=true" {
+			t.Errorf("expected upstream to receive query active=true, got %s", r.URL.RawQuery)
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("upstream response"))
@@ -25,9 +30,9 @@ func TestProxy_ForwardsRequest(t *testing.T) {
 		{Path: "/users", Upstream: upstream.URL},
 	}
 	router := routing.New(routes)
-	p := proxy.New(router)
+	p := proxy.New(router, zap.NewNop())
 
-	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/users/123?active=true", nil)
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(rec, req)
 
@@ -44,7 +49,7 @@ func TestProxy_UnknownPathReturns404(t *testing.T) {
 		{Path: "/users", Upstream: "http://localhost:9999"},
 	}
 	router := routing.New(routes)
-	p := proxy.New(router)
+	p := proxy.New(router, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/unknown", nil)
 	rec := httptest.NewRecorder()
@@ -61,7 +66,7 @@ func TestProxy_UnreachableUpstreamReturns502(t *testing.T) {
 		{Path: "/users", Upstream: "http://127.0.0.1:1"},
 	}
 	router := routing.New(routes)
-	p := proxy.New(router)
+	p := proxy.New(router, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
 	rec := httptest.NewRecorder()

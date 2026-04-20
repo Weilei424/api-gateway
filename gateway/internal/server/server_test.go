@@ -11,6 +11,7 @@ import (
 	"gateway/internal/routing"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestServer_HealthzReturnsOK(t *testing.T) {
@@ -80,4 +81,39 @@ func TestServer_ProxyPreservesRequestIDResponseHeader(t *testing.T) {
 	if rec.Header().Get("X-Request-ID") != "req-123" {
 		t.Fatalf("expected response header to preserve request ID, got %q", rec.Header().Get("X-Request-ID"))
 	}
+}
+
+func TestServer_ProxyLogsMatchedUpstream(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	router := routing.New([]config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}})
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("NewMetrics returned error: %v", err)
+	}
+
+	srv := New(8080, router, logger, metrics)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", rec.Code)
+	}
+
+	for _, entry := range logs.All() {
+		if entry.Message != "request completed" {
+			continue
+		}
+
+		fields := entry.ContextMap()
+		if fields["upstream"] != "http://127.0.0.1:1" {
+			t.Fatalf("expected upstream field, got %v", fields["upstream"])
+		}
+
+		return
+	}
+
+	t.Fatal("expected request completed log entry")
 }

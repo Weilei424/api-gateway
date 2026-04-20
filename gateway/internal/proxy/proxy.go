@@ -17,6 +17,9 @@ type Proxy struct {
 }
 
 type upstreamKey struct{}
+type upstreamValue struct {
+	value string
+}
 
 // New creates a new Proxy with the given Router.
 func New(router *routing.Router, logger *zap.Logger) *Proxy {
@@ -28,13 +31,23 @@ func New(router *routing.Router, logger *zap.Logger) *Proxy {
 }
 
 func WithUpstream(ctx context.Context, upstream string) context.Context {
-	return context.WithValue(ctx, upstreamKey{}, upstream)
+	if value, ok := ctx.Value(upstreamKey{}).(*upstreamValue); ok {
+		value.value = upstream
+		return ctx
+	}
+
+	return context.WithValue(ctx, upstreamKey{}, &upstreamValue{value: upstream})
 }
 
 func UpstreamFromContext(ctx context.Context) string {
-	upstream, _ := ctx.Value(upstreamKey{}).(string)
+	switch value := ctx.Value(upstreamKey{}).(type) {
+	case *upstreamValue:
+		return value.value
+	case string:
+		return value
+	}
 
-	return upstream
+	return ""
 }
 
 // ServeHTTP implements the http.Handler interface. It matches the incoming request path

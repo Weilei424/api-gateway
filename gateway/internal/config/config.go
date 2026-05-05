@@ -17,7 +17,35 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port int `yaml:"port"`
+	Port           int                  `yaml:"port"`
+	TimeoutMs      int                  `yaml:"timeout_ms"`
+	RateLimit      RateLimitConfig      `yaml:"rate_limit"`
+	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
+	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
+	Retry          RetryConfig          `yaml:"retry"`
+}
+
+// RateLimitConfig holds rate limiting settings.
+type RateLimitConfig struct {
+	RequestsPerSecond float64 `yaml:"requests_per_second"`
+	Burst             int     `yaml:"burst"`
+}
+
+// HealthCheckConfig holds health check settings.
+type HealthCheckConfig struct {
+	IntervalMs int `yaml:"interval_ms"`
+}
+
+// CircuitBreakerConfig holds circuit breaker settings.
+type CircuitBreakerConfig struct {
+	FailureThreshold  int `yaml:"failure_threshold"`
+	RecoveryTimeoutMs int `yaml:"recovery_timeout_ms"`
+}
+
+// RetryConfig holds retry settings.
+type RetryConfig struct {
+	MaxAttempts int `yaml:"max_attempts"`
+	BaseDelayMs int `yaml:"base_delay_ms"`
 }
 
 // Route maps an incoming path prefix to an upstream service URL.
@@ -49,25 +77,31 @@ func validate(cfg *Config) error {
 	if cfg.Server.Port <= 0 {
 		return fmt.Errorf("server.port must be a positive integer")
 	}
+	if cfg.Server.TimeoutMs < 0 {
+		return fmt.Errorf("server.timeout_ms must be >= 0")
+	}
+	if cfg.Server.RateLimit.RequestsPerSecond > 0 && cfg.Server.RateLimit.Burst < 1 {
+		return fmt.Errorf("server.rate_limit.burst must be >= 1 when rate limiting is enabled")
+	}
 	if len(cfg.Routes) == 0 {
 		return fmt.Errorf("at least one route must be defined")
 	}
 
 	seen := make(map[string]bool)
-	for i, r := range cfg.Routes {
-		path := strings.TrimSpace(r.Path)
-		if path == "" {
+	for i := range cfg.Routes {
+		cfg.Routes[i].Path = strings.TrimSpace(cfg.Routes[i].Path)
+		if cfg.Routes[i].Path == "" {
 			return fmt.Errorf("route[%d]: path is required", i)
 		}
-		if !strings.HasPrefix(path, "/") {
+		if !strings.HasPrefix(cfg.Routes[i].Path, "/") {
 			return fmt.Errorf("route[%d]: path must start with /", i)
 		}
-		if seen[path] {
-			return fmt.Errorf("route[%d]: duplicate path %q", i, path)
+		if seen[cfg.Routes[i].Path] {
+			return fmt.Errorf("route[%d]: duplicate path %q", i, cfg.Routes[i].Path)
 		}
-		seen[path] = true
+		seen[cfg.Routes[i].Path] = true
 
-		if err := validateUpstream(r.Upstream, i); err != nil {
+		if err := validateUpstream(cfg.Routes[i].Upstream, i); err != nil {
 			return err
 		}
 	}

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -107,6 +108,25 @@ func TestValidate(t *testing.T) {
 			cfg:     Config{Server: ServerConfig{Port: 8080}, Routes: []Route{{Path: "/a", Upstream: "http://"}}},
 			wantErr: "must include a host",
 		},
+		{
+			name: "negative timeout_ms",
+			cfg: Config{
+				Server: ServerConfig{Port: 8080, TimeoutMs: -1},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "timeout_ms",
+		},
+		{
+			name: "rate limit enabled with zero burst",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:      8080,
+					RateLimit: RateLimitConfig{RequestsPerSecond: 10, Burst: 0},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "burst",
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,21 +141,10 @@ func TestValidate(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 			}
-			if !containsString(err.Error(), tt.wantErr) {
+			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("expected error to contain %q, got: %v", tt.wantErr, err)
 			}
 		})
 	}
 }
 
-func containsString(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
-		func() bool {
-			for i := 0; i <= len(s)-len(sub); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
-			return false
-		}())
-}

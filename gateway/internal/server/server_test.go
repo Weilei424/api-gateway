@@ -5,23 +5,42 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"gateway/internal/config"
+	"gateway/internal/health"
 	"gateway/internal/observability"
+	"gateway/internal/proxy"
 	"gateway/internal/routing"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestServer_HealthzReturnsOK(t *testing.T) {
-	router := routing.New([]config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}})
+func minimalServer(t *testing.T, routes []config.Route, logger *zap.Logger) *Server {
+	t.Helper()
+	router := routing.New(routes)
+	upstreams := make([]string, len(routes))
+	for i, r := range routes {
+		upstreams[i] = r.Upstream
+	}
+	checker := health.NewChecker(upstreams, time.Hour, logger)
+	forwarders := proxy.BuildForwarders(routes,
+		config.RetryConfig{MaxAttempts: 1},
+		config.CircuitBreakerConfig{FailureThreshold: 100, RecoveryTimeoutMs: 30000},
+		logger,
+	)
+	p := proxy.New(router, logger, checker, forwarders)
 	metrics, err := observability.NewMetrics()
 	if err != nil {
-		t.Fatalf("NewMetrics returned error: %v", err)
+		t.Fatalf("NewMetrics: %v", err)
 	}
+	return New(8080, p, logger, metrics, config.ServerConfig{Port: 8080})
+}
 
-	srv := New(8080, router, zap.NewNop(), metrics)
+func TestServer_HealthzReturnsOK(t *testing.T) {
+	routes := []config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}}
+	srv := minimalServer(t, routes, zap.NewNop())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -33,13 +52,8 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 }
 
 func TestServer_MetricsEndpointReturnsPrometheusOutput(t *testing.T) {
-	router := routing.New([]config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}})
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("NewMetrics returned error: %v", err)
-	}
-
-	srv := New(8080, router, zap.NewNop(), metrics)
+	routes := []config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}}
+	srv := minimalServer(t, routes, zap.NewNop())
 
 	requestRec := httptest.NewRecorder()
 	requestReq := httptest.NewRequest(http.MethodGet, "/users/123", nil)
@@ -62,13 +76,8 @@ func TestServer_MetricsEndpointReturnsPrometheusOutput(t *testing.T) {
 }
 
 func TestServer_ProxyPreservesRequestIDResponseHeader(t *testing.T) {
-	router := routing.New([]config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}})
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("NewMetrics returned error: %v", err)
-	}
-
-	srv := New(8080, router, zap.NewNop(), metrics)
+	routes := []config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}}
+	srv := minimalServer(t, routes, zap.NewNop())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
@@ -86,13 +95,8 @@ func TestServer_ProxyPreservesRequestIDResponseHeader(t *testing.T) {
 func TestServer_ProxyLogsMatchedUpstream(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
-	router := routing.New([]config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}})
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("NewMetrics returned error: %v", err)
-	}
-
-	srv := New(8080, router, logger, metrics)
+	routes := []config.Route{{Path: "/users", Upstream: "http://127.0.0.1:1"}}
+	srv := minimalServer(t, routes, logger)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
@@ -106,14 +110,11 @@ func TestServer_ProxyLogsMatchedUpstream(t *testing.T) {
 		if entry.Message != "request completed" {
 			continue
 		}
-
 		fields := entry.ContextMap()
 		if fields["upstream"] != "http://127.0.0.1:1" {
 			t.Fatalf("expected upstream field, got %v", fields["upstream"])
 		}
-
 		return
 	}
-
 	t.Fatal("expected request completed log entry")
 }

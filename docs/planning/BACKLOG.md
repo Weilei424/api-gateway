@@ -57,15 +57,15 @@
 
 ### Phase 4 — Reliability
 
-- [ ] Implement request timeout middleware (`internal/middleware/timeout.go`)
-- [ ] Configure HTTP transport timeout
-- [ ] Implement periodic upstream health checks (`internal/health/checker.go`)
-- [ ] Mark upstreams healthy/unhealthy
-- [ ] Implement token bucket rate limiter (`internal/middleware/ratelimit.go`)
-- [ ] Apply per-client-IP rate limit
-- [ ] Implement retry logic with exponential backoff (`internal/proxy/retry.go`)
-- [ ] Implement circuit breaker (`internal/proxy/circuitbreaker.go`)
-- [ ] Open circuit on failure threshold, allow recovery
+- [x] Implement request timeout middleware (`internal/middleware/timeout.go`)
+- [x] Configure HTTP transport timeout via context propagation
+- [x] Implement periodic upstream health checks (`internal/health/checker.go`)
+- [x] Mark upstreams healthy/unhealthy
+- [x] Implement token bucket rate limiter (`internal/middleware/ratelimit.go`)
+- [x] Apply per-client-IP rate limit
+- [x] Implement retry logic with exponential backoff (`internal/proxy/forwarder.go`)
+- [x] Implement circuit breaker (`internal/proxy/circuitbreaker.go`)
+- [x] Open circuit on failure threshold, allow recovery
 
 ---
 

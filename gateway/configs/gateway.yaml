@@ -1,5 +1,17 @@
 server:
   port: 8080
+  timeout_ms: 30000
+  rate_limit:
+    requests_per_second: 100
+    burst: 20
+  health_check:
+    interval_ms: 10000
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout_ms: 30000
+  retry:
+    max_attempts: 3
+    base_delay_ms: 100
 
 routes:
   - path: /users

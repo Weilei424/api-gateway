@@ -72,7 +72,7 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		buf := newResponseBuffer()
+		isLast := attempt == maxAttempts-1
 		var netErr error
 
 		rp := &httputil.ReverseProxy{
@@ -90,11 +90,25 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 				}
 			},
 		}
+
+		if isLast {
+			// Stream directly on the last attempt — no in-memory buffering.
+			sc := &statusCapture{ResponseWriter: w}
+			rp.ServeHTTP(sc, r)
+			if netErr != nil || sc.code >= 500 {
+				f.cb.RecordFailure()
+			} else {
+				f.cb.RecordSuccess()
+			}
+			return
+		}
+
+		// Buffer on non-final attempts so we can inspect status and retry.
+		buf := newResponseBuffer()
 		rp.ServeHTTP(buf, r)
 
 		failed := netErr != nil || buf.statusCode() >= 500
-		isLast := attempt == maxAttempts-1
-		shouldRetry := failed && !isLast && (netErr != nil || isIdempotent) && !errors.Is(netErr, context.DeadlineExceeded)
+		shouldRetry := failed && (netErr != nil || isIdempotent) && !errors.Is(netErr, context.DeadlineExceeded)
 
 		if shouldRetry {
 			f.cb.RecordFailure()
@@ -114,6 +128,24 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+}
+
+// statusCapture wraps an http.ResponseWriter to record the status code while streaming through.
+type statusCapture struct {
+	http.ResponseWriter
+	code int
+}
+
+func (sc *statusCapture) WriteHeader(code int) {
+	sc.code = code
+	sc.ResponseWriter.WriteHeader(code)
+}
+
+func (sc *statusCapture) Write(b []byte) (int, error) {
+	if sc.code == 0 {
+		sc.code = http.StatusOK
+	}
+	return sc.ResponseWriter.Write(b)
 }
 
 // responseBuffer is a minimal http.ResponseWriter that captures the response for retry inspection.

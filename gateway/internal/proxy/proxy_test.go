@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func intPtr(v int) *int { return &v }
+
 func minimalProxy(routes []config.Route) *proxy.Proxy {
 	router := routing.New(routes)
 	upstreams := make([]string, len(routes))
@@ -22,8 +24,8 @@ func minimalProxy(routes []config.Route) *proxy.Proxy {
 	}
 	checker := health.NewChecker(upstreams, time.Hour, zap.NewNop())
 	forwarders := proxy.BuildForwarders(routes,
-		config.RetryConfig{MaxAttempts: 1},
-		config.CircuitBreakerConfig{FailureThreshold: 100, RecoveryTimeoutMs: 30000},
+		config.RetryConfig{MaxAttempts: intPtr(1)},
+		config.CircuitBreakerConfig{FailureThreshold: intPtr(100), RecoveryTimeoutMs: 30000},
 		zap.NewNop(),
 	)
 	return proxy.New(router, zap.NewNop(), checker, forwarders)
@@ -89,8 +91,8 @@ func TestProxy_UnhealthyUpstreamReturns503(t *testing.T) {
 	checker := health.NewChecker([]string{"http://127.0.0.1:1"}, time.Hour, zap.NewNop())
 	checker.PollAll() // mark as unhealthy (connection refused)
 	forwarders := proxy.BuildForwarders(routes,
-		config.RetryConfig{MaxAttempts: 1},
-		config.CircuitBreakerConfig{FailureThreshold: 100, RecoveryTimeoutMs: 30000},
+		config.RetryConfig{MaxAttempts: intPtr(1)},
+		config.CircuitBreakerConfig{FailureThreshold: intPtr(100), RecoveryTimeoutMs: 30000},
 		zap.NewNop(),
 	)
 	p := proxy.New(router, zap.NewNop(), checker, forwarders)

@@ -37,15 +37,19 @@ type HealthCheckConfig struct {
 }
 
 // CircuitBreakerConfig holds circuit breaker settings.
+// FailureThreshold uses *int so that YAML absence (nil) is distinguishable
+// from an explicit zero value, which is invalid per the >= 1 spec rule.
 type CircuitBreakerConfig struct {
-	FailureThreshold  int `yaml:"failure_threshold"`
-	RecoveryTimeoutMs int `yaml:"recovery_timeout_ms"`
+	FailureThreshold  *int `yaml:"failure_threshold"`
+	RecoveryTimeoutMs int  `yaml:"recovery_timeout_ms"`
 }
 
 // RetryConfig holds retry settings.
+// MaxAttempts uses *int so that YAML absence (nil) is distinguishable
+// from an explicit zero value, which is invalid per the >= 1 spec rule.
 type RetryConfig struct {
-	MaxAttempts int `yaml:"max_attempts"`
-	BaseDelayMs int `yaml:"base_delay_ms"`
+	MaxAttempts *int `yaml:"max_attempts"`
+	BaseDelayMs int  `yaml:"base_delay_ms"`
 }
 
 // Route maps an incoming path prefix to an upstream service URL.
@@ -83,19 +87,13 @@ func validate(cfg *Config) error {
 	if cfg.Server.RateLimit.RequestsPerSecond > 0 && cfg.Server.RateLimit.Burst < 1 {
 		return fmt.Errorf("server.rate_limit.burst must be >= 1 when rate limiting is enabled")
 	}
-	cb := cfg.Server.CircuitBreaker
-	if cb.FailureThreshold != 0 || cb.RecoveryTimeoutMs != 0 {
-		if cb.FailureThreshold < 1 {
-			return fmt.Errorf("server.circuit_breaker.failure_threshold must be >= 1")
-		}
+	if cb := cfg.Server.CircuitBreaker; cb.FailureThreshold != nil && *cb.FailureThreshold < 1 {
+		return fmt.Errorf("server.circuit_breaker.failure_threshold must be >= 1")
 	}
-	retry := cfg.Server.Retry
-	if retry.MaxAttempts != 0 || retry.BaseDelayMs != 0 {
-		if retry.MaxAttempts < 1 {
-			return fmt.Errorf("server.retry.max_attempts must be >= 1")
-		}
+	if r := cfg.Server.Retry; r.MaxAttempts != nil && *r.MaxAttempts < 1 {
+		return fmt.Errorf("server.retry.max_attempts must be >= 1")
 	}
-	if cfg.Server.Retry.MaxAttempts > 1 && cfg.Server.Retry.BaseDelayMs < 0 {
+	if r := cfg.Server.Retry; r.MaxAttempts != nil && *r.MaxAttempts > 1 && r.BaseDelayMs < 0 {
 		return fmt.Errorf("server.retry.base_delay_ms must be >= 0")
 	}
 	if len(cfg.Routes) == 0 {

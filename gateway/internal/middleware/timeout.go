@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"sync"
@@ -17,51 +16,53 @@ func Timeout(d time.Duration) Middleware {
 			ctx, cancel := context.WithTimeout(r.Context(), d)
 			defer cancel()
 
-			tw := &timeoutWriter{}
+			tw := &timeoutWriter{ResponseWriter: w}
 			done := make(chan struct{})
+			panicChan := make(chan interface{}, 1)
 
 			go func() {
-				defer close(done)
+				defer func() {
+					if p := recover(); p != nil {
+						panicChan <- p
+					}
+				}()
 				next.ServeHTTP(tw, r.WithContext(ctx))
+				close(done)
 			}()
 
 			select {
+			case p := <-panicChan:
+				panic(p)
 			case <-done:
-				tw.flush(w)
+				// Handler completed normally; response already streamed to w.
 			case <-ctx.Done():
-				tw.mu.Lock()
-				tw.timedOut = true
-				tw.mu.Unlock()
-				http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+				if !tw.markTimedOut() {
+					http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+				}
 			}
 		})
 	}
 }
 
+// timeoutWriter streams directly to the underlying ResponseWriter while
+// coordinating with the timeout goroutine via a mutex. No response body is
+// buffered; if a timeout fires after headers have already been sent, the
+// connection is left for the proxy to close via context cancellation.
 type timeoutWriter struct {
+	http.ResponseWriter
 	mu       sync.Mutex
-	headers  http.Header
-	code     int
-	body     bytes.Buffer
+	started  bool
 	timedOut bool
-}
-
-func (tw *timeoutWriter) Header() http.Header {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-	if tw.headers == nil {
-		tw.headers = make(http.Header)
-	}
-	return tw.headers
 }
 
 func (tw *timeoutWriter) WriteHeader(code int) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-	if tw.timedOut || tw.code != 0 {
+	if tw.timedOut {
 		return
 	}
-	tw.code = code
+	tw.started = true
+	tw.ResponseWriter.WriteHeader(code)
 }
 
 func (tw *timeoutWriter) Write(b []byte) (int, error) {
@@ -70,24 +71,18 @@ func (tw *timeoutWriter) Write(b []byte) (int, error) {
 	if tw.timedOut {
 		return 0, http.ErrHandlerTimeout
 	}
-	if tw.code == 0 {
-		tw.code = http.StatusOK
-	}
-	return tw.body.Write(b)
+	tw.started = true
+	return tw.ResponseWriter.Write(b)
 }
 
-func (tw *timeoutWriter) flush(w http.ResponseWriter) {
+// markTimedOut marks the writer as timed out. Returns true if a response had
+// already started (caller must not write a 504 in that case).
+func (tw *timeoutWriter) markTimedOut() (started bool) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-	for k, vs := range tw.headers {
-		for _, v := range vs {
-			w.Header().Add(k, v)
-		}
+	if tw.started {
+		return true
 	}
-	code := tw.code
-	if code == 0 {
-		code = http.StatusOK
-	}
-	w.WriteHeader(code)
-	_, _ = w.Write(tw.body.Bytes())
+	tw.timedOut = true
+	return false
 }

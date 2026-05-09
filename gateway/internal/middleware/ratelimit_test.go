@@ -64,6 +64,28 @@ func TestRateLimit_ZeroRPS_Passthrough(t *testing.T) {
 	}
 }
 
+func TestRateLimit_SameIPDifferentPortSharesBucket(t *testing.T) {
+	handler := RateLimit(0.001, 1)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// First connection from 1.2.3.4 exhausts burst=1
+	rec1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.RemoteAddr = "1.2.3.4:1000"
+	handler.ServeHTTP(rec1, req1)
+
+	// Second connection from same IP, different port — must share the bucket
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.RemoteAddr = "1.2.3.4:2000"
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 for same IP on different port, got %d", rec2.Code)
+	}
+}
+
 func TestRateLimit_PerClientIP(t *testing.T) {
 	handler := RateLimit(0.001, 1)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

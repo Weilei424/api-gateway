@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+func intPtr(v int) *int { return &v }
+
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "gateway-*.yaml")
@@ -121,7 +123,7 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Server: ServerConfig{
 					Port:  8080,
-					Retry: RetryConfig{MaxAttempts: 3, BaseDelayMs: -1},
+					Retry: RetryConfig{MaxAttempts: intPtr(3), BaseDelayMs: -1},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},
@@ -143,18 +145,29 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Server: ServerConfig{
 					Port:           8080,
-					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: -1, RecoveryTimeoutMs: 5000},
+					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: intPtr(-1), RecoveryTimeoutMs: 5000},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},
 			wantErr: "failure_threshold",
 		},
 		{
-			name: "zero circuit_breaker failure_threshold when recovery configured",
+			name: "zero circuit_breaker failure_threshold with recovery configured",
 			cfg: Config{
 				Server: ServerConfig{
 					Port:           8080,
-					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: 0, RecoveryTimeoutMs: 5000},
+					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: intPtr(0), RecoveryTimeoutMs: 5000},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "failure_threshold",
+		},
+		{
+			name: "zero circuit_breaker failure_threshold without sibling field",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:           8080,
+					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: intPtr(0)},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},
@@ -165,18 +178,29 @@ func TestValidate(t *testing.T) {
 			cfg: Config{
 				Server: ServerConfig{
 					Port:  8080,
-					Retry: RetryConfig{MaxAttempts: -1},
+					Retry: RetryConfig{MaxAttempts: intPtr(-1)},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},
 			wantErr: "max_attempts",
 		},
 		{
-			name: "zero retry max_attempts when base_delay configured",
+			name: "zero retry max_attempts with base_delay configured",
 			cfg: Config{
 				Server: ServerConfig{
 					Port:  8080,
-					Retry: RetryConfig{MaxAttempts: 0, BaseDelayMs: 100},
+					Retry: RetryConfig{MaxAttempts: intPtr(0), BaseDelayMs: 100},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "max_attempts",
+		},
+		{
+			name: "zero retry max_attempts without sibling field",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:  8080,
+					Retry: RetryConfig{MaxAttempts: intPtr(0)},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},
@@ -202,4 +226,3 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
-

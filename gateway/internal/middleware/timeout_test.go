@@ -37,6 +37,22 @@ func TestTimeout_DeadlineExceeded_Returns504(t *testing.T) {
 	}
 }
 
+func TestTimeout_HandlerPanic_RePanics(t *testing.T) {
+	handler := Timeout(100*time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("downstream panic")
+	}))
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected the handler panic to be re-panicked on the serving goroutine")
+		}
+	}()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(rec, req)
+}
+
 func TestTimeout_Zero_NoDeadline(t *testing.T) {
 	var hadDeadline bool
 	handler := Timeout(0)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

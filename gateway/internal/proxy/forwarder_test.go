@@ -13,6 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func intPtr(v int) *int { return &v }
+
 func newTestForwarder(t *testing.T, targetURL string, maxAttempts int) *Forwarder {
 	t.Helper()
 	target, err := url.Parse(targetURL)
@@ -20,7 +22,7 @@ func newTestForwarder(t *testing.T, targetURL string, maxAttempts int) *Forwarde
 		t.Fatalf("parse target: %v", err)
 	}
 	cb := NewCircuitBreaker(100, time.Minute)
-	return NewForwarder(target, cb, config.RetryConfig{MaxAttempts: maxAttempts, BaseDelayMs: 10}, zap.NewNop())
+	return NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(maxAttempts), BaseDelayMs: 10}, zap.NewNop())
 }
 
 func TestForwarder_ForwardsSuccessfulRequest(t *testing.T) {
@@ -133,7 +135,7 @@ func TestForwarder_RetriesGETOn503(t *testing.T) {
 func TestForwarder_CircuitOpenReturns503(t *testing.T) {
 	target, _ := url.Parse("http://127.0.0.1:1")
 	cb := NewCircuitBreaker(1, time.Minute)
-	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: 1}, zap.NewNop())
+	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(1)}, zap.NewNop())
 
 	// Trip the circuit.
 	rec1 := httptest.NewRecorder()
@@ -157,7 +159,7 @@ func TestForwarder_OnlyFinalOutcomeUpdatesCircuitBreaker(t *testing.T) {
 	// threshold=2: circuit should only open after 2 request-level failures
 	cb := NewCircuitBreaker(2, time.Minute)
 	// 2 attempts per request: one intermediate, one final
-	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: 2, BaseDelayMs: 0}, zap.NewNop())
+	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(2), BaseDelayMs: 0}, zap.NewNop())
 
 	rec := httptest.NewRecorder()
 	f.Do(rec, httptest.NewRequest(http.MethodGet, "/", nil))

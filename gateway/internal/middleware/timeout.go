@@ -16,6 +16,15 @@ func Timeout(d time.Duration) Middleware {
 			ctx, cancel := context.WithTimeout(r.Context(), d)
 			defer cancel()
 
+			// handlerCtx is a plain cancel context passed to the handler goroutine.
+			// Because it is NOT the same channel as ctx, the handler goroutine cannot
+			// unblock from <-r.Context().Done() until cancelHandler() is called
+			// explicitly — which only happens AFTER markTimedOut() has set timedOut=true.
+			// This eliminates the race where the handler writes between ctx.Done()
+			// firing and timedOut being set.
+			handlerCtx, cancelHandler := context.WithCancel(r.Context())
+			defer cancelHandler()
+
 			tw := &timeoutWriter{ResponseWriter: w}
 			done := make(chan struct{})
 			panicChan := make(chan interface{}, 1)
@@ -26,7 +35,7 @@ func Timeout(d time.Duration) Middleware {
 						panicChan <- p
 					}
 				}()
-				next.ServeHTTP(tw, r.WithContext(ctx))
+				next.ServeHTTP(tw, r.WithContext(handlerCtx))
 				close(done)
 			}()
 
@@ -36,7 +45,9 @@ func Timeout(d time.Duration) Middleware {
 			case <-done:
 				// Handler completed normally; response already streamed to w.
 			case <-ctx.Done():
-				if !tw.markTimedOut() {
+				started := tw.markTimedOut()
+				cancelHandler()
+				if !started {
 					http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
 				}
 			}
@@ -75,12 +86,32 @@ func (tw *timeoutWriter) Write(b []byte) (int, error) {
 	return tw.ResponseWriter.Write(b)
 }
 
-// markTimedOut marks the writer as timed out. Returns true if a response had
-// already started (caller must not write a 504 in that case).
+// markTimedOut prevents further writes and returns whether a response had already
+// started. Callers should write a 504 only when this returns false.
 func (tw *timeoutWriter) markTimedOut() (started bool) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 	started = tw.started
 	tw.timedOut = true
 	return started
+}
+
+// Unwrap allows http.ResponseController to traverse the wrapper chain and
+// discover optional capabilities (Flusher, Hijacker, etc.) on the underlying
+// ResponseWriter.
+func (tw *timeoutWriter) Unwrap() http.ResponseWriter {
+	return tw.ResponseWriter
+}
+
+// Flush implements http.Flusher for callers that type-assert directly.
+// The flush is suppressed if the timeout has already fired.
+func (tw *timeoutWriter) Flush() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut {
+		return
+	}
+	if f, ok := tw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

@@ -111,7 +111,6 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 		shouldRetry := failed && (netErr != nil || isIdempotent) && !errors.Is(netErr, context.DeadlineExceeded)
 
 		if shouldRetry {
-			f.cb.RecordFailure()
 			f.logger.Warn("upstream error, retrying",
 				zap.Int("attempt", attempt+1),
 				zap.Int("status", buf.statusCode()),

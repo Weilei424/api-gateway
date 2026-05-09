@@ -147,6 +147,28 @@ func TestForwarder_CircuitOpenReturns503(t *testing.T) {
 	}
 }
 
+func TestForwarder_OnlyFinalOutcomeUpdatesCircuitBreaker(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	target, _ := url.Parse(srv.URL)
+	// threshold=2: circuit should only open after 2 request-level failures
+	cb := NewCircuitBreaker(2, time.Minute)
+	// 2 attempts per request: one intermediate, one final
+	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: 2, BaseDelayMs: 0}, zap.NewNop())
+
+	rec := httptest.NewRecorder()
+	f.Do(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	// After one request-level failure (threshold=2), circuit must still be closed.
+	// Bug: old code records RecordFailure per attempt, so 2 attempts = threshold reached = open.
+	if !cb.Allow() {
+		t.Fatal("circuit should be closed after one request-level failure when threshold=2")
+	}
+}
+
 func TestForwarder_TimeoutReturns504(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {

@@ -34,8 +34,12 @@ func BuildForwarders(routes []config.Route, retryCfg config.RetryConfig, cbCfg c
 			continue
 		}
 		target, _ := url.Parse(route.Upstream) // already validated by config
+		threshold := 0
+		if cbCfg.FailureThreshold != nil {
+			threshold = *cbCfg.FailureThreshold
+		}
 		cb := NewCircuitBreaker(
-			cbCfg.FailureThreshold,
+			threshold,
 			time.Duration(cbCfg.RecoveryTimeoutMs)*time.Millisecond,
 		)
 		forwarders[route.Upstream] = NewForwarder(target, cb, retryCfg, logger)
@@ -50,7 +54,10 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	maxAttempts := f.retry.MaxAttempts
+	maxAttempts := 0
+	if f.retry.MaxAttempts != nil {
+		maxAttempts = *f.retry.MaxAttempts
+	}
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}

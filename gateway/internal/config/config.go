@@ -83,11 +83,17 @@ func validate(cfg *Config) error {
 	if cfg.Server.RateLimit.RequestsPerSecond > 0 && cfg.Server.RateLimit.Burst < 1 {
 		return fmt.Errorf("server.rate_limit.burst must be >= 1 when rate limiting is enabled")
 	}
-	if cfg.Server.CircuitBreaker.FailureThreshold < 0 {
-		return fmt.Errorf("server.circuit_breaker.failure_threshold must be >= 1")
+	cb := cfg.Server.CircuitBreaker
+	if cb.FailureThreshold != 0 || cb.RecoveryTimeoutMs != 0 {
+		if cb.FailureThreshold < 1 {
+			return fmt.Errorf("server.circuit_breaker.failure_threshold must be >= 1")
+		}
 	}
-	if cfg.Server.Retry.MaxAttempts < 0 {
-		return fmt.Errorf("server.retry.max_attempts must be >= 1")
+	retry := cfg.Server.Retry
+	if retry.MaxAttempts != 0 || retry.BaseDelayMs != 0 {
+		if retry.MaxAttempts < 1 {
+			return fmt.Errorf("server.retry.max_attempts must be >= 1")
+		}
 	}
 	if cfg.Server.Retry.MaxAttempts > 1 && cfg.Server.Retry.BaseDelayMs < 0 {
 		return fmt.Errorf("server.retry.base_delay_ms must be >= 0")

@@ -117,6 +117,17 @@ func TestValidate(t *testing.T) {
 			wantErr: "timeout_ms",
 		},
 		{
+			name: "negative retry base_delay_ms",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:  8080,
+					Retry: RetryConfig{MaxAttempts: 3, BaseDelayMs: -1},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "base_delay_ms",
+		},
+		{
 			name: "rate limit enabled with zero burst",
 			cfg: Config{
 				Server: ServerConfig{

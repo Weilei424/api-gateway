@@ -80,9 +80,7 @@ func (tw *timeoutWriter) Write(b []byte) (int, error) {
 func (tw *timeoutWriter) markTimedOut() (started bool) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-	if tw.started {
-		return true
-	}
+	started = tw.started
 	tw.timedOut = true
-	return false
+	return started
 }

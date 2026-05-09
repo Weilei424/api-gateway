@@ -150,11 +150,33 @@ func TestValidate(t *testing.T) {
 			wantErr: "failure_threshold",
 		},
 		{
+			name: "zero circuit_breaker failure_threshold when recovery configured",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:           8080,
+					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: 0, RecoveryTimeoutMs: 5000},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "failure_threshold",
+		},
+		{
 			name: "negative retry max_attempts",
 			cfg: Config{
 				Server: ServerConfig{
 					Port:  8080,
 					Retry: RetryConfig{MaxAttempts: -1},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "max_attempts",
+		},
+		{
+			name: "zero retry max_attempts when base_delay configured",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:  8080,
+					Retry: RetryConfig{MaxAttempts: 0, BaseDelayMs: 100},
 				},
 				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
 			},

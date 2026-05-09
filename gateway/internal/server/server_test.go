@@ -17,6 +17,8 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func intPtr(v int) *int { return &v }
+
 func minimalServer(t *testing.T, routes []config.Route, logger *zap.Logger) *Server {
 	t.Helper()
 	router := routing.New(routes)
@@ -26,8 +28,8 @@ func minimalServer(t *testing.T, routes []config.Route, logger *zap.Logger) *Ser
 	}
 	checker := health.NewChecker(upstreams, time.Hour, logger)
 	forwarders := proxy.BuildForwarders(routes,
-		config.RetryConfig{MaxAttempts: 1},
-		config.CircuitBreakerConfig{FailureThreshold: 100, RecoveryTimeoutMs: 30000},
+		config.RetryConfig{MaxAttempts: intPtr(1)},
+		config.CircuitBreakerConfig{FailureThreshold: intPtr(100), RecoveryTimeoutMs: 30000},
 		logger,
 	)
 	p := proxy.New(router, logger, checker, forwarders)

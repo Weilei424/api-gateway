@@ -138,6 +138,28 @@ func TestValidate(t *testing.T) {
 			},
 			wantErr: "burst",
 		},
+		{
+			name: "negative circuit_breaker failure_threshold",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:           8080,
+					CircuitBreaker: CircuitBreakerConfig{FailureThreshold: -1, RecoveryTimeoutMs: 5000},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "failure_threshold",
+		},
+		{
+			name: "negative retry max_attempts",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:  8080,
+					Retry: RetryConfig{MaxAttempts: -1},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "max_attempts",
+		},
 	}
 
 	for _, tt := range tests {

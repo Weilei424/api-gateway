@@ -59,9 +59,12 @@ func run() int {
 		}
 	}
 
+	appCtx, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
+
 	interval := time.Duration(cfg.Server.HealthCheck.IntervalMs) * time.Millisecond
 	checker := health.NewChecker(upstreams, interval, logger)
-	checker.Start(context.Background())
+	checker.Start(appCtx)
 
 	forwarders := proxy.BuildForwarders(cfg.Routes, cfg.Server.Retry, cfg.Server.CircuitBreaker, logger)
 	router := routing.New(cfg.Routes)

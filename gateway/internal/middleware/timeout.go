@@ -22,6 +22,11 @@ func Timeout(d time.Duration) Middleware {
 			// explicitly — which only happens AFTER markTimedOut() has set timedOut=true.
 			// This eliminates the race where the handler writes between ctx.Done()
 			// firing and timedOut being set.
+			// deadlineCtx wraps handlerCtx but reports the deadline from ctx so
+			// that downstream code (e.g. proxy transports) can observe the request
+			// deadline via r.Context().Deadline() without being cancelled when the
+			// timer fires — cancellation is gated through cancelHandler().
+			deadline, _ := ctx.Deadline()
 			handlerCtx, cancelHandler := context.WithCancel(r.Context())
 			defer cancelHandler()
 
@@ -35,7 +40,7 @@ func Timeout(d time.Duration) Middleware {
 						panicChan <- p
 					}
 				}()
-				next.ServeHTTP(tw, r.WithContext(handlerCtx))
+				next.ServeHTTP(tw, r.WithContext(deadlineCtx{handlerCtx, deadline}))
 				close(done)
 			}()
 
@@ -115,3 +120,14 @@ func (tw *timeoutWriter) Flush() {
 		f.Flush()
 	}
 }
+
+// deadlineCtx wraps a cancel-only context but exposes the deadline from the
+// parent timeout context. This lets downstream handlers observe the request
+// deadline via r.Context().Deadline() while cancellation remains gated
+// through cancelHandler (called only after markTimedOut sets timedOut=true).
+type deadlineCtx struct {
+	context.Context
+	deadline time.Time
+}
+
+func (d deadlineCtx) Deadline() (time.Time, bool) { return d.deadline, true }

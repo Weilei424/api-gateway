@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"gateway/internal/health"
 	"gateway/internal/routing"
@@ -19,7 +20,20 @@ type Proxy struct {
 
 type upstreamKey struct{}
 type upstreamValue struct {
+	mu    sync.Mutex
 	value string
+}
+
+func (uv *upstreamValue) set(s string) {
+	uv.mu.Lock()
+	uv.value = s
+	uv.mu.Unlock()
+}
+
+func (uv *upstreamValue) get() string {
+	uv.mu.Lock()
+	defer uv.mu.Unlock()
+	return uv.value
 }
 
 // New creates a new Proxy. checker and forwarders must be pre-built from the same route list.
@@ -37,18 +51,17 @@ func New(router *routing.Router, logger *zap.Logger, checker *health.Checker, fo
 
 func WithUpstream(ctx context.Context, upstream string) context.Context {
 	if value, ok := ctx.Value(upstreamKey{}).(*upstreamValue); ok {
-		value.value = upstream
+		value.set(upstream)
 		return ctx
 	}
-	return context.WithValue(ctx, upstreamKey{}, &upstreamValue{value: upstream})
+	uv := &upstreamValue{}
+	uv.set(upstream)
+	return context.WithValue(ctx, upstreamKey{}, uv)
 }
 
 func UpstreamFromContext(ctx context.Context) string {
-	switch value := ctx.Value(upstreamKey{}).(type) {
-	case *upstreamValue:
-		return value.value
-	case string:
-		return value
+	if value, ok := ctx.Value(upstreamKey{}).(*upstreamValue); ok {
+		return value.get()
 	}
 	return ""
 }

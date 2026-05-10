@@ -130,6 +130,17 @@ func TestValidate(t *testing.T) {
 			wantErr: "base_delay_ms",
 		},
 		{
+			name: "negative requests_per_second",
+			cfg: Config{
+				Server: ServerConfig{
+					Port:      8080,
+					RateLimit: RateLimitConfig{RequestsPerSecond: -1, Burst: 5},
+				},
+				Routes: []Route{{Path: "/a", Upstream: "http://localhost:9001"}},
+			},
+			wantErr: "requests_per_second",
+		},
+		{
 			name: "rate limit enabled with zero burst",
 			cfg: Config{
 				Server: ServerConfig{

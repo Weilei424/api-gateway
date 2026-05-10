@@ -73,6 +73,7 @@ func (f *Forwarder) Do(w http.ResponseWriter, r *http.Request) {
 			jitter := time.Duration(rand.Int63n(int64(base)))
 			select {
 			case <-r.Context().Done():
+				f.cb.RecordFailure()
 				http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 				return
 			case <-time.After(delay + jitter):

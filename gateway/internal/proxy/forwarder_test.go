@@ -171,6 +171,36 @@ func TestForwarder_OnlyFinalOutcomeUpdatesCircuitBreaker(t *testing.T) {
 	}
 }
 
+func TestForwarder_ContextCancelInHalfOpenRecordsFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	target, _ := url.Parse(srv.URL)
+	cb := NewCircuitBreaker(1, 20*time.Millisecond)
+	// Large base delay so the context cancel fires during backoff, not during the upstream call.
+	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(2), BaseDelayMs: 2000}, zap.NewNop())
+
+	// Trip the circuit with one failure.
+	f.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	// Wait for recovery timeout to elapse.
+	time.Sleep(30 * time.Millisecond)
+
+	// The next Allow() will transition Open → HalfOpen.
+	// The admitted GET request fails with 500, enters 2-second backoff, then the
+	// context is cancelled before the backoff completes.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	f.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx))
+
+	// Circuit must be open again, not permanently stuck in HalfOpen.
+	if cb.Allow() {
+		t.Fatal("circuit should be open after context-cancelled half-open attempt, but Allow() returned true")
+	}
+}
+
 func TestForwarder_TimeoutReturns504(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {

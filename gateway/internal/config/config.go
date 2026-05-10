@@ -84,6 +84,9 @@ func validate(cfg *Config) error {
 	if cfg.Server.TimeoutMs < 0 {
 		return fmt.Errorf("server.timeout_ms must be >= 0")
 	}
+	if cfg.Server.RateLimit.RequestsPerSecond < 0 {
+		return fmt.Errorf("server.rate_limit.requests_per_second must be >= 0")
+	}
 	if cfg.Server.RateLimit.RequestsPerSecond > 0 && cfg.Server.RateLimit.Burst < 1 {
 		return fmt.Errorf("server.rate_limit.burst must be >= 1 when rate limiting is enabled")
 	}

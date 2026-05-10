@@ -115,6 +115,22 @@ func TestTimeout_WritesRejectedAfterTimeoutEvenIfStarted(t *testing.T) {
 	}
 }
 
+func TestTimeout_DeadlineVisibleToHandler(t *testing.T) {
+	var hasDeadline bool
+
+	handler := Timeout(100*time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hasDeadline = r.Context().Deadline()
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if !hasDeadline {
+		t.Error("expected handler to see the timeout deadline via r.Context().Deadline()")
+	}
+}
+
 func TestTimeout_Zero_NoDeadline(t *testing.T) {
 	var hadDeadline bool
 	handler := Timeout(0)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

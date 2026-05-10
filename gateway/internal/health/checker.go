@@ -39,6 +39,7 @@ func NewChecker(upstreams []string, interval time.Duration, logger *zap.Logger) 
 // It stops when ctx is cancelled.
 func (c *Checker) Start(ctx context.Context) {
 	go func() {
+		c.pollAll()
 		ticker := time.NewTicker(c.interval)
 		defer ticker.Stop()
 		for {

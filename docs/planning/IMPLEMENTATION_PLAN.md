@@ -91,5 +91,5 @@ Mini API Gateway implemented in Go — inspired by Kong, Envoy, and NGINX Gatewa
 
 **Success criteria:**
 - In-flight requests complete before server exits
-- Integration tests pass with `go test ./test/integration/...`
+- Integration tests pass with `go test -tags=integration ./test/integration/...`
 - `README.md` explains how to run and demo the gateway

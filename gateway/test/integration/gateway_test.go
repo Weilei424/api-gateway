@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -371,7 +372,20 @@ func findModuleRoot(t *testing.T) string {
 // This exercises the signal.NotifyContext path in cmd/gateway/main.go that
 // TestGracefulShutdown (which calls srv.Shutdown directly) does not cover.
 func TestRun_GracefulShutdownOnSIGTERM(t *testing.T) {
-	backend := mock.New(mock.HandlerConfig{StatusCode: 200, Body: "done", Delay: 300 * time.Millisecond})
+	requestStarted := make(chan struct{}, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Signal only for the proxied test request, not for health-checker polls
+		// (the checker calls pollAll immediately on Start, hitting this backend at "/").
+		if r.URL.Path == "/test" {
+			select {
+			case requestStarted <- struct{}{}:
+			default:
+			}
+		}
+		time.Sleep(300 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "done")
+	}))
 	defer backend.Close()
 
 	port := freePort(t)
@@ -395,7 +409,7 @@ server:
 routes:
   - path: /test
     upstream: %s
-`, port, backend.URL())
+`, port, backend.URL)
 
 	workDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(workDir, "configs"), 0755); err != nil {
@@ -437,7 +451,11 @@ routes:
 		ch <- result{code: resp.StatusCode}
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-requestStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("backend did not receive request within 5s")
+	}
 
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("send SIGTERM: %v", err)

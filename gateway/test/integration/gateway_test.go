@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -338,6 +342,129 @@ func TestGracefulShutdown(t *testing.T) {
 	_, err := http.Get(gw.BaseURL + "/test")
 	if err == nil {
 		t.Error("expected connection refused after shutdown, got nil error")
+	}
+}
+
+// findModuleRoot walks up from the current working directory to find the Go
+// module root (the directory containing go.mod).
+func findModuleRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("go.mod not found walking up from %s", dir)
+		}
+		dir = parent
+	}
+}
+
+// TestRun_GracefulShutdownOnSIGTERM builds the real gateway binary, starts it
+// as a subprocess, sends SIGTERM while a request is in-flight, and asserts that
+// the in-flight request completes with 200 and the process exits with code 0.
+// This exercises the signal.NotifyContext path in cmd/gateway/main.go that
+// TestGracefulShutdown (which calls srv.Shutdown directly) does not cover.
+func TestRun_GracefulShutdownOnSIGTERM(t *testing.T) {
+	backend := mock.New(mock.HandlerConfig{StatusCode: 200, Body: "done", Delay: 300 * time.Millisecond})
+	defer backend.Close()
+
+	port := freePort(t)
+
+	cfgContent := fmt.Sprintf(`
+server:
+  port: %d
+  timeout_ms: 10000
+  shutdown_timeout_ms: 5000
+  rate_limit:
+    requests_per_second: 100
+    burst: 20
+  health_check:
+    interval_ms: 60000
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout_ms: 30000
+  retry:
+    max_attempts: 1
+    base_delay_ms: 0
+routes:
+  - path: /test
+    upstream: %s
+`, port, backend.URL())
+
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "configs"), 0755); err != nil {
+		t.Fatalf("mkdir configs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "configs", "gateway.yaml"), []byte(cfgContent), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	binPath := filepath.Join(t.TempDir(), "gateway")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/gateway")
+	buildCmd.Dir = findModuleRoot(t)
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+
+	cmd := exec.Command(binPath)
+	cmd.Dir = workDir
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start gateway: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+
+	base := fmt.Sprintf("http://localhost:%d", port)
+	waitReady(t, base)
+
+	type result struct {
+		code int
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		resp, err := http.Get(base + "/test")
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		resp.Body.Close()
+		ch <- result{code: resp.StatusCode}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("send SIGTERM: %v", err)
+	}
+
+	exitCh := make(chan error, 1)
+	go func() { exitCh <- cmd.Wait() }()
+
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			t.Errorf("in-flight request: %v", res.err)
+		} else if res.code != http.StatusOK {
+			t.Errorf("in-flight request: expected 200, got %d", res.code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("in-flight request did not complete within 5s")
+	}
+
+	select {
+	case err := <-exitCh:
+		if err != nil {
+			t.Errorf("expected clean exit after SIGTERM, got: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Error("gateway did not exit within 10s after SIGTERM")
 	}
 }
 

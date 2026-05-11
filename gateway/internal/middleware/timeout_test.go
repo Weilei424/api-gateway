@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -128,6 +129,32 @@ func TestTimeout_DeadlineVisibleToHandler(t *testing.T) {
 
 	if !hasDeadline {
 		t.Error("expected handler to see the timeout deadline via r.Context().Deadline()")
+	}
+}
+
+// TestTimeout_ClientCancel_NoGatewayTimeout guards against emitting 504 when the
+// parent request context is canceled (e.g. client disconnect) rather than when
+// the gateway timeout fires.
+func TestTimeout_ClientCancel_NoGatewayTimeout(t *testing.T) {
+	handler := Timeout(500*time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+
+	rec := httptest.NewRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(rec, req)
+	}()
+
+	cancel()
+	<-done
+
+	if rec.Code == http.StatusGatewayTimeout {
+		t.Errorf("expected no 504 on client cancel, got %d", rec.Code)
 	}
 }
 

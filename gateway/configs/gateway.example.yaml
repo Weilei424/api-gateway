@@ -1,0 +1,26 @@
+# Example gateway config with three upstream services.
+# Copy to gateway.yaml and adjust to your environment.
+
+server:
+  port: 8080
+  timeout_ms: 30000          # per-request timeout in milliseconds (0 = disabled)
+  shutdown_timeout_ms: 15000 # graceful shutdown drain window in milliseconds
+  rate_limit:
+    requests_per_second: 200 # token bucket refill rate per client IP
+    burst: 50                # maximum burst size per client IP
+  health_check:
+    interval_ms: 10000       # upstream poll interval in milliseconds
+  circuit_breaker:
+    failure_threshold: 5     # failures before the circuit opens
+    recovery_timeout_ms: 30000 # time before a half-open probe attempt
+  retry:
+    max_attempts: 3          # total attempts (1 = no retry)
+    base_delay_ms: 100       # base exponential backoff delay
+
+routes:
+  - path: /users
+    upstream: http://localhost:9001
+  - path: /orders
+    upstream: http://localhost:9002
+  - path: /products
+    upstream: http://localhost:9003

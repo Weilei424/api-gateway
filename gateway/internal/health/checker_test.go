@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,5 +58,30 @@ func TestChecker_MarksUnhealthyOnConnectionRefused(t *testing.T) {
 
 	if c.IsHealthy("http://127.0.0.1:1") {
 		t.Error("expected upstream to be unhealthy when connection is refused")
+	}
+}
+
+func TestChecker_StartPollsBeforeFirstTick(t *testing.T) {
+	polled := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case polled <- struct{}{}:
+		default:
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// A 1-hour interval guarantees the ticker never fires during this test.
+	// The only way polled receives is if Start runs pollAll() immediately.
+	c := NewChecker([]string{srv.URL}, time.Hour, zap.NewNop())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.Start(ctx)
+
+	select {
+	case <-polled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Start did not poll upstreams immediately before first ticker interval")
 	}
 }

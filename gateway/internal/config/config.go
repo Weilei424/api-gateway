@@ -17,12 +17,13 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port           int                  `yaml:"port"`
-	TimeoutMs      int                  `yaml:"timeout_ms"`
-	RateLimit      RateLimitConfig      `yaml:"rate_limit"`
-	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
-	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
-	Retry          RetryConfig          `yaml:"retry"`
+	Port              int                  `yaml:"port"`
+	TimeoutMs         int                  `yaml:"timeout_ms"`
+	ShutdownTimeoutMs int                  `yaml:"shutdown_timeout_ms"`
+	RateLimit         RateLimitConfig      `yaml:"rate_limit"`
+	HealthCheck       HealthCheckConfig    `yaml:"health_check"`
+	CircuitBreaker    CircuitBreakerConfig `yaml:"circuit_breaker"`
+	Retry             RetryConfig          `yaml:"retry"`
 }
 
 // RateLimitConfig holds rate limiting settings.
@@ -83,6 +84,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Server.TimeoutMs < 0 {
 		return fmt.Errorf("server.timeout_ms must be >= 0")
+	}
+	if cfg.Server.ShutdownTimeoutMs < 0 {
+		return fmt.Errorf("server.shutdown_timeout_ms must be >= 0")
 	}
 	if cfg.Server.RateLimit.RequestsPerSecond < 0 {
 		return fmt.Errorf("server.rate_limit.requests_per_second must be >= 0")

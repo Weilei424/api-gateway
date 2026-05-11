@@ -1,6 +1,7 @@
 server:
   port: 8080
-  timeout_ms: 30000
+  timeout_ms: 30000          # per-request timeout (0 = disabled)
+  shutdown_timeout_ms: 15000 # drain window on SIGINT/SIGTERM
   rate_limit:
     requests_per_second: 100
     burst: 20

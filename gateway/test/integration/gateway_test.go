@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -154,6 +155,13 @@ func TestProxy_HappyPath(t *testing.T) {
 	}
 	if resp.Header.Get("X-Request-ID") == "" {
 		t.Error("expected X-Request-ID header in response")
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(body) != "hello from upstream" {
+		t.Errorf("expected body %q, got %q", "hello from upstream", string(body))
 	}
 }
 

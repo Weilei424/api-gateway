@@ -51,6 +51,42 @@ func TestLoad_FileNotFound(t *testing.T) {
 	}
 }
 
+func TestLoad_ShutdownTimeoutMs(t *testing.T) {
+	yaml := `
+server:
+  port: 8080
+  shutdown_timeout_ms: 10000
+routes:
+  - path: /api
+    upstream: http://localhost:9001
+`
+	cfg, err := Load(writeTemp(t, yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Server.ShutdownTimeoutMs != 10000 {
+		t.Errorf("expected shutdown_timeout_ms 10000, got %d", cfg.Server.ShutdownTimeoutMs)
+	}
+}
+
+func TestLoad_ShutdownTimeoutMs_NegativeRejected(t *testing.T) {
+	yaml := `
+server:
+  port: 8080
+  shutdown_timeout_ms: -1
+routes:
+  - path: /api
+    upstream: http://localhost:9001
+`
+	_, err := Load(writeTemp(t, yaml))
+	if err == nil {
+		t.Fatal("expected error for negative shutdown_timeout_ms")
+	}
+	if !strings.Contains(err.Error(), "shutdown_timeout_ms") {
+		t.Errorf("expected error to mention shutdown_timeout_ms, got: %v", err)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string

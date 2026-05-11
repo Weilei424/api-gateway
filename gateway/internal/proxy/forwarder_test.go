@@ -178,7 +178,7 @@ func TestForwarder_ContextCancelInHalfOpenRecordsFailure(t *testing.T) {
 	defer srv.Close()
 
 	target, _ := url.Parse(srv.URL)
-	cb := NewCircuitBreaker(1, 20*time.Millisecond)
+	cb := NewCircuitBreaker(1, 200*time.Millisecond)
 
 	// Trip the circuit instantly using MaxAttempts:1 — no retry backoff.
 	trip := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(1)}, zap.NewNop())
@@ -188,7 +188,7 @@ func TestForwarder_ContextCancelInHalfOpenRecordsFailure(t *testing.T) {
 	}
 
 	// Wait for recovery timeout to elapse.
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(250 * time.Millisecond)
 
 	// The next Allow() transitions Open → HalfOpen. The admitted GET fails with 500,
 	// enters a 2-second retry backoff, and the context is cancelled before it completes.

@@ -52,7 +52,7 @@ func Timeout(d time.Duration) Middleware {
 			case <-ctx.Done():
 				started := tw.markTimedOut()
 				cancelHandler()
-				if !started {
+				if !started && ctx.Err() == context.DeadlineExceeded {
 					http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
 				}
 			}

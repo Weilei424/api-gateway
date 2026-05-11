@@ -179,18 +179,17 @@ func TestForwarder_ContextCancelInHalfOpenRecordsFailure(t *testing.T) {
 
 	target, _ := url.Parse(srv.URL)
 	cb := NewCircuitBreaker(1, 20*time.Millisecond)
-	// Large base delay so the context cancel fires during backoff, not during the upstream call.
-	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(2), BaseDelayMs: 2000}, zap.NewNop())
 
-	// Trip the circuit with one failure.
-	f.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	// Trip the circuit instantly using MaxAttempts:1 — no retry backoff.
+	trip := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(1)}, zap.NewNop())
+	trip.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 
 	// Wait for recovery timeout to elapse.
 	time.Sleep(30 * time.Millisecond)
 
-	// The next Allow() will transition Open → HalfOpen.
-	// The admitted GET request fails with 500, enters 2-second backoff, then the
-	// context is cancelled before the backoff completes.
+	// The next Allow() transitions Open → HalfOpen. The admitted GET fails with 500,
+	// enters a 2-second retry backoff, and the context is cancelled before it completes.
+	f := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(2), BaseDelayMs: 2000}, zap.NewNop())
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	f.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx))

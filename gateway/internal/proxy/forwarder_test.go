@@ -183,6 +183,9 @@ func TestForwarder_ContextCancelInHalfOpenRecordsFailure(t *testing.T) {
 	// Trip the circuit instantly using MaxAttempts:1 — no retry backoff.
 	trip := NewForwarder(target, cb, config.RetryConfig{MaxAttempts: intPtr(1)}, zap.NewNop())
 	trip.Do(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	if cb.Allow() {
+		t.Fatal("expected circuit to be open after trip failure")
+	}
 
 	// Wait for recovery timeout to elapse.
 	time.Sleep(30 * time.Millisecond)

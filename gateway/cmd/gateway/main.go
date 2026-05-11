@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"gateway/internal/config"
@@ -71,21 +75,40 @@ func run() int {
 	p := proxy.New(router, logger, checker, forwarders)
 
 	srv := server.New(cfg.Server.Port, p, logger, metrics, cfg.Server)
-	logger.Info("starting gateway server", zap.Int("port", cfg.Server.Port))
 
-	// Validate that all upstream URLs parsed correctly (already done in config,
-	// but log any that couldn't be resolved to a forwarder for observability).
+	// Validate upstream URL parseability (observability only — already validated by config).
 	for _, upstream := range upstreams {
 		if _, err := url.Parse(upstream); err != nil {
 			logger.Warn("unparseable upstream URL", zap.String("upstream", upstream))
 		}
 	}
 
-	if err := srv.Start(); err != nil {
-		logger.Error("server stopped", zap.Error(err))
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server error", zap.Error(err))
+		}
+	}()
+
+	logger.Info("starting gateway server", zap.Int("port", cfg.Server.Port))
+	<-ctx.Done()
+	stop()
+	cancelApp() // stop health checker before draining
+
+	timeout := time.Duration(cfg.Server.ShutdownTimeoutMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("shutdown error", zap.Error(err))
 		return 1
 	}
-
+	logger.Info("gateway stopped cleanly")
 	return 0
 }
 

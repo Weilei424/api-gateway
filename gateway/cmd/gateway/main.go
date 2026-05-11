@@ -86,14 +86,20 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	startErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("server error", zap.Error(err))
+			startErr <- err
 		}
 	}()
 
 	logger.Info("starting gateway server", zap.Int("port", cfg.Server.Port))
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case err := <-startErr:
+		logger.Error("server failed to start", zap.Error(err))
+		return 1
+	}
 	stop()
 	cancelApp() // stop health checker before draining
 

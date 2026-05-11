@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -119,4 +121,55 @@ func TestServer_ProxyLogsMatchedUpstream(t *testing.T) {
 		return
 	}
 	t.Fatal("expected request completed log entry")
+}
+
+func TestServer_ShutdownDrainsInFlightRequests(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+
+	routes := []config.Route{{Path: "/", Upstream: slow.URL}}
+	srv := minimalServer(t, routes, zap.NewNop())
+
+	// Override the server address to use a random free port.
+	srv.httpServer.Addr = "127.0.0.1:0"
+	ln, err := net.Listen("tcp", srv.httpServer.Addr)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_ = srv.httpServer.Serve(ln)
+	}()
+	<-started
+
+	addr := ln.Addr().String()
+
+	done := make(chan int, 1)
+	go func() {
+		resp, err := http.Get("http://" + addr + "/")
+		if err != nil {
+			done <- 0
+			return
+		}
+		resp.Body.Close()
+		done <- resp.StatusCode
+	}()
+
+	time.Sleep(20 * time.Millisecond) // let request reach handler
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
+	code := <-done
+	if code != http.StatusOK {
+		t.Fatalf("expected in-flight request to complete with 200, got %d", code)
+	}
 }

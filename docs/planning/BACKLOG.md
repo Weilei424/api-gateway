@@ -72,26 +72,26 @@
 ### Phase 5 — Polish & Demo
 
 #### Graceful Shutdown
-- [ ] Add `ShutdownTimeoutMs int` to `ServerConfig` in `gateway/internal/config/config.go`
-- [ ] Add `shutdown_timeout_ms: 15000` to `gateway/configs/gateway.yaml`
-- [ ] Add `Shutdown(ctx context.Context) error` method to `Server` in `gateway/internal/server/server.go`
-- [ ] Refactor `gateway/cmd/gateway/main.go`: replace blocking `srv.Start()` with goroutine + `signal.NotifyContext` + `srv.Shutdown` drain
+- [x] Add `ShutdownTimeoutMs int` to `ServerConfig` in `gateway/internal/config/config.go`
+- [x] Add `shutdown_timeout_ms: 15000` to `gateway/configs/gateway.yaml`
+- [x] Add `Shutdown(ctx context.Context) error` method to `Server` in `gateway/internal/server/server.go`
+- [x] Refactor `gateway/cmd/gateway/main.go`: replace blocking `srv.Start()` with goroutine + `signal.NotifyContext` + `srv.Shutdown` drain
 
 #### Mock Backend
-- [ ] Implement `gateway/test/mock/backend.go` — `Backend` struct with `New`, `URL`, `Close`, `RequestCount`, `SetHandler`
-- [ ] Implement `gateway/cmd/mockbackend/main.go` — CLI binary with `--port`, `--status`, `--delay`, `--body` flags
+- [x] Implement `gateway/test/mock/backend.go` — `Backend` struct with `New`, `URL`, `Close`, `RequestCount`, `SetHandler`
+- [x] Implement `gateway/cmd/mockbackend/main.go` — CLI binary with `--port`, `--status`, `--delay`, `--body` flags
 
 #### Integration Tests
-- [ ] Create `gateway/test/integration/gateway_test.go` with `//go:build integration` tag and `TestMain` harness
-- [ ] Implement `TestProxy_HappyPath` — routed request returns 200 with correct body
-- [ ] Implement `TestProxy_UnknownRoute` — unknown path returns 404
-- [ ] Implement `TestProxy_UpstreamError` — unreachable upstream (connection refused), retries exhausted → 502
-- [ ] Implement `TestRateLimit_Exceeded` — burst over limit → 429
-- [ ] Implement `TestTimeout_SlowUpstream` — backend delay > timeout → 504
-- [ ] Implement `TestCircuitBreaker_Opens` — threshold failures → circuit open → 503
-- [ ] Implement `TestHealthCheck_MarksUnhealthy` — backend down → checker marks unhealthy
-- [ ] Implement `TestGracefulShutdown` — in-flight request completes after SIGTERM
+- [x] Create `gateway/test/integration/gateway_test.go` with `//go:build integration` tag and per-test setup helpers (no shared `TestMain` harness — each test builds its own gateway via `newTestGateway`)
+- [x] Implement `TestProxy_HappyPath` — routed request returns 200 with correct body
+- [x] Implement `TestProxy_UnknownRoute` — unknown path returns 404
+- [x] Implement `TestProxy_UpstreamError` — unreachable upstream (connection refused), retries exhausted → 502
+- [x] Implement `TestRateLimit_Exceeded` — burst over limit → 429
+- [x] Implement `TestTimeout_SlowUpstream` — backend delay > timeout → 504
+- [x] Implement `TestCircuitBreaker_Opens` — threshold failures → circuit open → 503
+- [x] Implement `TestHealthCheck_MarksUnhealthy` — backend down → checker marks unhealthy
+- [x] Implement `TestGracefulShutdown` — in-flight request completes after drain; `TestRun_GracefulShutdownOnSIGTERM` exercises real binary + SIGTERM path
 
 #### Example Configs & README
-- [ ] Add `gateway/configs/gateway.example.yaml` — multi-route example (3 upstreams)
-- [ ] Write `README.md` at repo root (quick start, demo, config reference, architecture, reliability features, test commands)
+- [x] Add `gateway/configs/gateway.example.yaml` — multi-route example (3 upstreams)
+- [x] Write `README.md` at repo root (quick start, demo, config reference, architecture, reliability features, test commands)
